@@ -7,7 +7,9 @@ import logging
 from pathlib import Path
 from typing import Annotated, NoReturn
 
+import orjson
 import typer
+from pydantic import ValidationError
 
 from app.aggregate.service import AggregationService
 from app.collector import MergeRequestCollector
@@ -92,7 +94,15 @@ def render() -> None:
         build_dir=build_dir,
         public_dir=public_dir,
     )
-    manifest = service.run()
+    try:
+        manifest = service.run()
+    except (FileNotFoundError, orjson.JSONDecodeError, ValidationError, OSError) as exc:
+        typer.secho(
+            f"Failed to render dashboards: {exc}",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
     typer.echo(f"Rendered {len(manifest)} artifacts to {public_dir}")
 
 

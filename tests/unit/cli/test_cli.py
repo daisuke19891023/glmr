@@ -3,12 +3,15 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
+import orjson
 import pytest
 from typer.testing import CliRunner
 
 from app import cli
+from pydantic import BaseModel, ValidationError
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from app.config import AppSettings
@@ -17,7 +20,7 @@ if TYPE_CHECKING:
 @pytest.fixture
 def runner() -> CliRunner:
     """Provide a CLI runner for invoking Typer commands."""
-    return CliRunner()
+    return CliRunner(mix_stderr=False)
 
 
 def test_collect_command_invokes_collector(
@@ -116,6 +119,52 @@ def test_render_command_outputs_manifest(
 
     assert result.exit_code == 0
     assert "Rendered 1 artifacts" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "exc_factory",
+    [
+        lambda: FileNotFoundError("report.json not found"),
+        lambda: orjson.JSONDecodeError("invalid json", "{}", 0),
+        lambda: _build_validation_error(),
+        lambda: OSError("failed to write to build directory"),
+    ],
+    ids=["file-not-found", "json-decode", "validation", "os-error"],
+)
+def test_render_command_handles_expected_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    runner: CliRunner,
+    exc_factory: Callable[[], Exception],
+) -> None:
+    """Render command should surface expected runtime errors to the user."""
+    error = exc_factory()
+    error_message = str(error)
+
+    class FailingRenderService:
+        def __init__(self, **_: object) -> None:
+            return
+
+        def run(self) -> dict[str, str]:
+            raise error
+
+    monkeypatch.setattr(cli, "RenderService", FailingRenderService)
+
+    result = runner.invoke(cli.app, ["render"])
+
+    assert result.exit_code == 1
+    assert "Failed to render dashboards:" in result.stderr
+    assert error_message.splitlines()[0] in result.stderr
+
+
+def _build_validation_error() -> ValidationError:
+    class DummyModel(BaseModel):
+        value: int
+
+    try:
+        DummyModel.model_validate({"value": "invalid"})
+    except ValidationError as exc:
+        return exc
+    raise AssertionError("Expected DummyModel to raise a validation error")
 
 
 def test_doctor_command_invokes_health_check(

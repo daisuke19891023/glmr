@@ -140,7 +140,7 @@ class GitLabClient:
 
         while True:
             response = await self.request(method, path, params=current_params, headers=headers)
-            payload = response.json()
+            payload = self.parse_json(response)
             if isinstance(payload, list):
                 data_iter = cast("list[dict[str, Any]]", payload)
             elif isinstance(payload, dict):
@@ -157,6 +157,19 @@ class GitLabClient:
             if not next_page:
                 break
             current_params["page"] = next_page
+
+
+    def parse_json(self, response: httpx.Response) -> Any:
+        """Decode a JSON response or raise a GitLabAPIError on failure."""
+        try:
+            return response.json()
+        except ValueError as exc:
+            content_type = response.headers.get("Content-Type", "unknown")
+            message = (
+                "GitLab API returned an invalid JSON payload "
+                f"(status {response.status_code}, content-type {content_type})"
+            )
+            raise GitLabAPIError(message, status_code=response.status_code) from exc
 
 
 def _parse_retry_after(value: str | None) -> float:

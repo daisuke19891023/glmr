@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import typer
 
@@ -49,9 +49,13 @@ def collect(
     ] = None,
 ) -> None:
     """Collect merge request data and update the local JSONL cache."""
-    settings = _patched_settings(since=since, group=group)
-    collector = MergeRequestCollector(settings)
-    summary = asyncio.run(collector.run())
+    try:
+        base_settings = load_settings()
+        settings = _patched_settings(base_settings, since=since, group=group)
+        collector = MergeRequestCollector(settings)
+        summary = asyncio.run(collector.run())
+    except ValueError as exc:
+        _handle_settings_error(exc)
     typer.echo(
         "Collected {written} merge requests across {projects} projects (considered {seen}).".format(**summary),
     )
@@ -60,7 +64,10 @@ def collect(
 @app.command()
 def aggregate() -> None:
     """Aggregate raw data into reporting metrics."""
-    settings = load_settings()
+    try:
+        settings = load_settings()
+    except ValueError as exc:
+        _handle_settings_error(exc)
     cache_path = settings.cache_dir / "merge_requests.jsonl"
     output_path = Path("data/agg/report.json")
     service = AggregationService(cache_path=cache_path, output_path=output_path)
@@ -92,7 +99,10 @@ def render() -> None:
 @app.command()
 def doctor() -> None:
     """Validate configuration and verify GitLab API connectivity."""
-    settings = load_settings()
+    try:
+        settings = load_settings()
+    except ValueError as exc:
+        _handle_settings_error(exc)
     typer.echo(f"Loaded configuration for group: {settings.group_id_or_path}")
     asyncio.run(_doctor(settings))
 
@@ -108,8 +118,7 @@ async def _doctor(settings: AppSettings) -> None:
     typer.echo(f"Authenticated as: {payload.get('username', 'unknown')}")
 
 
-def _patched_settings(*, since: str | None, group: str | None) -> AppSettings:
-    settings = load_settings()
+def _patched_settings(settings: AppSettings, *, since: str | None, group: str | None) -> AppSettings:
     updates: dict[str, object] = {}
     if since:
         updates["report_since"] = since
@@ -118,6 +127,11 @@ def _patched_settings(*, since: str | None, group: str | None) -> AppSettings:
     if updates:
         settings = settings.model_copy(update=updates)
     return settings
+
+
+def _handle_settings_error(exc: ValueError) -> NoReturn:
+    typer.secho(f"Configuration error: {exc}", fg=typer.colors.RED, err=True)
+    raise typer.Exit(code=1) from exc
 
 
 if __name__ == "__main__":

@@ -136,3 +136,29 @@ def test_doctor_command_invokes_health_check(
 
     assert result.exit_code == 0
     assert called["settings"] == settings
+
+
+@pytest.mark.parametrize("command", ["collect", "aggregate", "doctor"])
+def test_commands_exit_when_configuration_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+    runner: CliRunner,
+    command: str,
+) -> None:
+    """Commands should surface configuration errors and exit with code 1."""
+
+    def fake_load_settings() -> AppSettings:
+        msg = "GLMR_GITLAB_TOKEN must be configured"
+        raise ValueError(msg)
+
+    monkeypatch.setattr(cli, "load_settings", fake_load_settings)
+
+    if command == "collect":
+        def fail_collector(*_: object, **__: object) -> None:
+            raise AssertionError("collector should not run when configuration is invalid")
+
+        monkeypatch.setattr(cli, "MergeRequestCollector", fail_collector)
+
+    result = runner.invoke(cli.app, [command])
+
+    assert result.exit_code == 1
+    assert "Configuration error: GLMR_GITLAB_TOKEN must be configured" in result.stderr

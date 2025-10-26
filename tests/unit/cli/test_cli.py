@@ -97,6 +97,35 @@ def test_aggregate_command_uses_cache_dir(
     assert output_path.name == "report.json"
 
 
+def test_aggregate_command_handles_os_error(
+    monkeypatch: pytest.MonkeyPatch,
+    runner: CliRunner,
+    tmp_path: Path,
+    settings: AppSettings,
+) -> None:
+    """Aggregate command should surface write failures with a helpful message."""
+
+    def fake_load_settings() -> AppSettings:
+        return settings.model_copy(update={"cache_dir": tmp_path})
+
+    class FailingAggregationService:
+        def __init__(self, *, cache_path: Path, output_path: Path, **_: object) -> None:
+            self.cache_path = cache_path
+            self.output_path = output_path
+
+        def run(self) -> SimpleNamespace:
+            raise OSError("disk full")
+
+    monkeypatch.setattr(cli, "load_settings", fake_load_settings)
+    monkeypatch.setattr(cli, "AggregationService", FailingAggregationService)
+
+    result = runner.invoke(cli.app, ["aggregate"])
+
+    assert result.exit_code == 1
+    assert "Failed to aggregate metrics into" in result.stderr
+    assert "report.json" in result.stderr
+
+
 def test_render_command_outputs_manifest(
     monkeypatch: pytest.MonkeyPatch,
     runner: CliRunner,

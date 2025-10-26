@@ -19,6 +19,8 @@ from app.render.service import RenderService
 
 app = typer.Typer(add_completion=False, help="GitLab Merge Request metrics tooling.")
 
+logger = logging.getLogger(__name__)
+
 
 def _configure_logging(verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
@@ -73,7 +75,13 @@ def aggregate() -> None:
     cache_path = settings.cache_dir / "merge_requests.jsonl"
     output_path = Path("data/agg/report.json")
     service = AggregationService(cache_path=cache_path, output_path=output_path)
-    report = service.run()
+    try:
+        report = service.run()
+    except OSError as exc:
+        message = f"Failed to aggregate metrics into {output_path}: {exc}"
+        logger.error(message)
+        typer.secho(message, fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
     typer.echo(
         f"Aggregated {len(report.projects)} projects and {len(report.people)} people into {output_path}",
     )

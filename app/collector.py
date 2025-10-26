@@ -4,8 +4,10 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, cast
 
+import typer
+
 from app.fetchers import discussions, merge_requests, notes, projects, reviewers
-from app.gitlab_client import GitLabClient
+from app.gitlab_client import GitLabAPIError, GitLabClient
 from app.models import MergeRequestRecord, Project
 from app.store.jsonl_cache import MergeRequestCache
 
@@ -34,7 +36,18 @@ class MergeRequestCollector:
         """Execute the collection workflow, returning summary statistics."""
         cache = MergeRequestCache(self._settings.cache_dir)
         async with GitLabClient(self._settings) as client:
-            project_list = await projects.fetch_group_projects(client, self._settings.group_id_or_path)
+            try:
+                project_list = await projects.fetch_group_projects(
+                    client,
+                    self._settings.group_id_or_path,
+                )
+            except GitLabAPIError as exc:
+                LOGGER.error(
+                    "Failed to fetch projects for %s: %s",
+                    self._settings.group_id_or_path,
+                    exc,
+                )
+                raise typer.Exit(code=1) from exc
             LOGGER.info("Discovered %s projects with merge requests enabled", len(project_list))
             total_seen = 0
             total_written = 0
@@ -52,11 +65,19 @@ class MergeRequestCollector:
         cache: MergeRequestCache,
     ) -> dict[str, int]:
         LOGGER.debug("Collecting merge requests for project %s", project.path_with_namespace)
-        merge_request_list = await merge_requests.fetch_project_merge_requests(
-            client,
-            project.id,
-            updated_after=self._settings.report_since,
-        )
+        try:
+            merge_request_list = await merge_requests.fetch_project_merge_requests(
+                client,
+                project.id,
+                updated_after=self._settings.report_since,
+            )
+        except GitLabAPIError as exc:
+            LOGGER.warning(
+                "Skipping project %s due to GitLab API error: %s",
+                project.path_with_namespace,
+                exc,
+            )
+            return {"seen": 0, "written": 0}
         LOGGER.debug("Fetched %s merge requests for %s", len(merge_request_list), project.path_with_namespace)
         tasks = [
             asyncio.create_task(self._build_record(client, project, merge_request))

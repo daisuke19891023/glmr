@@ -111,7 +111,7 @@ async def _doctor(settings: AppSettings) -> None:
     try:
         async with GitLabClient(settings) as client:
             response = await client.request("GET", "/user")
-            payload = response.json()
+            payload = client.parse_json(response)
     except Exception as exc:  # pragma: no cover - direct user feedback
         typer.echo(f"Failed to reach GitLab API: {exc}")
         raise typer.Exit(code=1) from exc

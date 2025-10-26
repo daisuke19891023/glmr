@@ -1,0 +1,64 @@
+stages:
+  - collect
+  - render
+  - pages
+
+default:
+  image: ghcr.io/astral-sh/uv:python3.13-bookworm
+  before_script:
+    - uv sync --extra dev
+  cache:
+    key: "${CI_COMMIT_REF_SLUG}"
+    paths:
+      - .uv-cache/
+      - .nox/
+  variables:
+    UV_CACHE_DIR: .uv-cache
+    UV_LINK_MODE: copy
+    GLMR_GITLAB_TOKEN: "placeholder-token"
+    GLMR_GROUP_ID_OR_PATH: "example/group"
+    GLMR_REPORT_SINCE: "1970-01-01T00:00:00Z"
+
+collect:
+  stage: collect
+  script:
+    - mkdir -p data/raw/mr
+    - |
+      if [ "${GLMR_GITLAB_TOKEN}" = "placeholder-token" ]; then
+        echo "GLMR_GITLAB_TOKEN is not configured; skipping data collection."
+      else
+        uv run glmr collect --since "${GLMR_REPORT_SINCE}" --group "${GLMR_GROUP_ID_OR_PATH}"
+      fi
+  artifacts:
+    paths:
+      - data/raw/
+    expire_in: 1 week
+
+render:
+  stage: render
+  needs:
+    - job: collect
+      artifacts: true
+  script:
+    - uv run glmr aggregate
+    - uv run glmr render
+  artifacts:
+    paths:
+      - data/agg/
+      - public/
+      - build/
+    expire_in: 1 week
+
+pages:
+  stage: pages
+  needs:
+    - job: render
+      artifacts: true
+  script:
+    - echo "Publishing GitLab Pages artifacts"
+  artifacts:
+    paths:
+      - public
+  only:
+    - main
+    - pages

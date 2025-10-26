@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import orjson
 import pendulum
+from pydantic import ValidationError
 
 from app.aggregate.models import (
     MetricTotals,
@@ -24,6 +26,9 @@ from app.models import GitLabUser, MergeRequestRecord, Project
 
 if TYPE_CHECKING:
     from datetime import datetime
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class AggregationService:
@@ -55,11 +60,30 @@ class AggregationService:
             return []
         records: list[MergeRequestRecord] = []
         with self._cache_path.open("rb") as handle:
-            for line in handle:
+            for index, line in enumerate(handle, start=1):
                 if not line.strip():
                     continue
-                payload = orjson.loads(line)
-                records.append(MergeRequestRecord.model_validate(payload))
+                try:
+                    payload = orjson.loads(line)
+                except orjson.JSONDecodeError as error:
+                    LOGGER.warning(
+                        "Skipping invalid JSON cache line %s:%s: %s",
+                        self._cache_path,
+                        index,
+                        error,
+                    )
+                    continue
+                try:
+                    record = MergeRequestRecord.model_validate(payload)
+                except ValidationError as error:
+                    LOGGER.warning(
+                        "Skipping invalid cache record %s:%s: %s",
+                        self._cache_path,
+                        index,
+                        error,
+                    )
+                    continue
+                records.append(record)
         return records
 
     def _build_report(self, records: list[MergeRequestRecord]) -> Report:

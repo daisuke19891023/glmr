@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import orjson
 import pendulum
+from pydantic import ValidationError
 
 from app.models import MergeRequestRecord
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class MergeRequestCache:
@@ -28,11 +33,29 @@ class MergeRequestCache:
         if not self._path.exists():
             return
         with self._path.open("rb") as handle:
-            for line in handle:
+            for index, line in enumerate(handle, start=1):
                 if not line.strip():
                     continue
-                payload = orjson.loads(line)
-                record = MergeRequestRecord.model_validate(payload)
+                try:
+                    payload = orjson.loads(line)
+                except orjson.JSONDecodeError as error:
+                    LOGGER.warning(
+                        "Skipping invalid JSON cache line %s:%s: %s",
+                        self._path,
+                        index,
+                        error,
+                    )
+                    continue
+                try:
+                    record = MergeRequestRecord.model_validate(payload)
+                except ValidationError as error:
+                    LOGGER.warning(
+                        "Skipping invalid cache record %s:%s: %s",
+                        self._path,
+                        index,
+                        error,
+                    )
+                    continue
                 self._records[record.cache_key()] = record
 
     def should_store(self, record: MergeRequestRecord) -> bool:

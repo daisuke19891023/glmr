@@ -1,7 +1,10 @@
 """Tests for the aggregation service."""
 
+import logging
+
 import orjson
 import pendulum
+import pytest
 
 from app.aggregate.models import build_windows
 from app.aggregate.service import AggregationService
@@ -85,3 +88,35 @@ def test_aggregation_service_handles_missing_cache(tmp_path: "Path") -> None:
     assert output_path.exists()
     assert report.projects == []
     assert report.people == []
+
+
+def test_aggregation_service_skips_invalid_cache_lines(
+    tmp_path: "Path", caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Invalid cache lines should be logged and ignored during aggregation."""
+    caplog.set_level(logging.WARNING)
+    reference = pendulum.datetime(2024, 2, 1, tz="UTC")
+    cache_path = tmp_path / "merge_requests.jsonl"
+    output_path = tmp_path / "agg" / "report.json"
+
+    record = build_record(reference)
+    invalid_json = b"{invalid json}\n"
+    invalid_payload = orjson.dumps({}) + b"\n"
+    valid_payload = orjson.dumps(record.model_dump(mode="json")) + b"\n"
+
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_bytes(invalid_json + invalid_payload + valid_payload)
+
+    service = AggregationService(
+        cache_path=cache_path,
+        output_path=output_path,
+        windows=build_windows(),
+        reference=reference,
+    )
+
+    report = service.run()
+
+    warning_messages = [entry.message for entry in caplog.records if entry.levelno == logging.WARNING]
+    assert any("invalid JSON cache line" in message for message in warning_messages)
+    assert any("invalid cache record" in message for message in warning_messages)
+    assert len(report.projects) == 1

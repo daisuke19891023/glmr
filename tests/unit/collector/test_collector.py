@@ -1,29 +1,38 @@
 from __future__ import annotations
 
 import logging
-from typing import Self, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Self
+from urllib.parse import quote
 
 import pytest
 import typer
 
 from app import collector as collector_module
 from app.collector import MergeRequestCollector
-from app.gitlab_client import GitLabAPIError
+from app.gitlab_client import GitLabAPIError, GitLabClient
 from tests import factories
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Iterable, Mapping
     from pathlib import Path
 
     from app.config import AppSettings
-    from app.models import Project
+    from app.collector import MergeRequestCacheProtocol
 
 
-class FakeGitLabClient:
-    """Stand-in async context manager for GitLabClient."""
+class FakeGitLabClient(GitLabClient):
+    """Stand-in async context manager for GitLabClient with configurable responses."""
 
-    def __init__(self, settings: object) -> None:
+    def __init__(
+        self,
+        settings: object,
+        *,
+        responses: Mapping[str, Iterable[dict[str, Any]] | BaseException] | None = None,
+    ) -> None:
         """Record initialization arguments for assertions if needed."""
         self.settings = settings
+        self._settings = settings
+        self.responses: dict[str, Iterable[dict[str, Any]] | BaseException] = dict(responses or {})
 
     async def __aenter__(self) -> Self:
         """Return self when entering the async context manager."""
@@ -37,6 +46,22 @@ class FakeGitLabClient:
     ) -> None:
         """Discard exception context when leaving the async manager."""
         del exc_type, exc, tb
+
+    async def paginate(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Yield configured responses or raise errors for specific paths."""
+        del method, params, headers
+        result = self.responses.get(path, [])
+        if isinstance(result, BaseException):
+            raise result
+        for item in result:
+            yield item
 
 
 class FakeMergeRequestCache:
@@ -65,24 +90,24 @@ class FakeMergeRequestCache:
 
 @pytest.mark.asyncio
 async def test_run_exits_when_project_listing_fails(
-    monkeypatch: pytest.MonkeyPatch,
     settings: AppSettings,
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Collector.run should exit with code 1 when project discovery fails."""
     caplog.set_level(logging.ERROR, logger=collector_module.__name__)
     failing_settings = settings.model_copy(update={"cache_dir": tmp_path})
-    collector = MergeRequestCollector(failing_settings)
-
-    async def fail_fetch_group_projects(*_: object, **__: object) -> list[object]:
-        raise GitLabAPIError("upstream failure")
-
-    monkeypatch.setattr(collector_module, "GitLabClient", FakeGitLabClient)
-    monkeypatch.setattr(
-        collector_module.projects,
-        "fetch_group_projects",
-        fail_fetch_group_projects,
+    responses = {
+        _group_projects_path(failing_settings): GitLabAPIError("upstream failure"),
+    }
+    collector = MergeRequestCollector(
+        failing_settings,
+        client_factory=lambda app_settings: FakeGitLabClient(
+            app_settings,
+            responses=responses,
+        ),
+        cache_provider=lambda cache_dir: FakeMergeRequestCache(cache_dir),
     )
 
     with pytest.raises(typer.Exit) as excinfo:
@@ -92,11 +117,12 @@ async def test_run_exits_when_project_listing_fails(
     assert isinstance(exit_exception, typer.Exit)
     assert exit_exception.exit_code == 1
     assert "upstream failure" in caplog.text
+    captured = capsys.readouterr()
+    assert "Failed to fetch projects" in captured.err
 
 
 @pytest.mark.asyncio
 async def test_run_skips_project_when_merge_requests_fail(
-    monkeypatch: pytest.MonkeyPatch,
     settings: AppSettings,
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
@@ -104,27 +130,21 @@ async def test_run_skips_project_when_merge_requests_fail(
     """Collector.run should log a warning and skip projects with API failures."""
     caplog.set_level(logging.WARNING, logger=collector_module.__name__)
     failing_settings = settings.model_copy(update={"cache_dir": tmp_path})
-    collector = MergeRequestCollector(failing_settings)
     project = factories.build_project()
-
-    async def fail_fetch_merge_requests(*_: object, **__: object) -> list[object]:
-        raise GitLabAPIError("merge request fetch failed")
-
-    async def return_projects(*_: object, **__: object) -> list[Project]:
-        return [project]
-
-    monkeypatch.setattr(
-        collector_module.merge_requests,
-        "fetch_project_merge_requests",
-        fail_fetch_merge_requests,
+    responses = {
+        _group_projects_path(failing_settings): [project.model_dump()],
+        _project_merge_requests_path(project.id): GitLabAPIError(
+            "merge request fetch failed",
+        ),
+    }
+    collector = MergeRequestCollector(
+        failing_settings,
+        client_factory=lambda app_settings: FakeGitLabClient(
+            app_settings,
+            responses=responses,
+        ),
+        cache_provider=lambda cache_dir: FakeMergeRequestCache(cache_dir),
     )
-    monkeypatch.setattr(
-        collector_module.projects,
-        "fetch_group_projects",
-        return_projects,
-    )
-    monkeypatch.setattr(collector_module, "GitLabClient", FakeGitLabClient)
-    monkeypatch.setattr(collector_module, "MergeRequestCache", FakeMergeRequestCache)
 
     summary = await collector.run()
 
@@ -134,29 +154,22 @@ async def test_run_skips_project_when_merge_requests_fail(
 
 @pytest.mark.asyncio
 async def test_run_exits_when_cache_initialization_fails(
-    monkeypatch: pytest.MonkeyPatch,
     settings: AppSettings,
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Collector.run should exit when the cache cannot be created."""
     caplog.set_level(logging.ERROR, logger=collector_module.__name__)
     failing_settings = settings.model_copy(update={"cache_dir": tmp_path})
-    collector = MergeRequestCollector(failing_settings)
+    def cache_factory(_: Path) -> MergeRequestCacheProtocol:
+        raise OSError("cache initialization failure")
 
-    class RaisingCache:
-        def __init__(self, *_: object, **__: object) -> None:
-            raise OSError("cache initialization failure")
-
-    captured_messages: list[tuple[str, bool]] = []
-
-    def capture_secho(message: str, *, err: bool = False, **kwargs: object) -> None:
-        del kwargs
-        captured_messages.append((message, err))
-
-    monkeypatch.setattr(collector_module, "MergeRequestCache", RaisingCache)
-    monkeypatch.setattr(collector_module, "GitLabClient", FakeGitLabClient)
-    monkeypatch.setattr(typer, "secho", capture_secho)
+    collector = MergeRequestCollector(
+        failing_settings,
+        client_factory=lambda app_settings: FakeGitLabClient(app_settings),
+        cache_provider=cache_factory,
+    )
 
     with pytest.raises(typer.Exit) as excinfo:
         await collector.run()
@@ -164,41 +177,32 @@ async def test_run_exits_when_cache_initialization_fails(
     exit_exception = excinfo.value
     assert exit_exception.exit_code == 1
     assert "cache initialization failure" in caplog.text
-    assert captured_messages
-    secho_message, is_err = captured_messages[-1]
-    assert "cache initialization failure" in secho_message
-    assert is_err is True
+    captured = capsys.readouterr()
+    assert "cache initialization failure" in captured.err
 
 
 @pytest.mark.asyncio
 async def test_run_exits_when_cache_flush_fails(
-    monkeypatch: pytest.MonkeyPatch,
     settings: AppSettings,
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Collector.run should exit when flushing the cache fails."""
     caplog.set_level(logging.ERROR, logger=collector_module.__name__)
     failing_settings = settings.model_copy(update={"cache_dir": tmp_path})
-    collector = MergeRequestCollector(failing_settings)
-
     class FlushFailingCache(FakeMergeRequestCache):
         def flush(self) -> None:
             raise OSError("cache flush failure")
 
-    async def return_projects(*_: object, **__: object) -> list[Project]:
-        return []
-
-    captured_messages: list[tuple[str, bool]] = []
-
-    def capture_secho(message: str, *, err: bool = False, **kwargs: object) -> None:
-        del kwargs
-        captured_messages.append((message, err))
-
-    monkeypatch.setattr(collector_module, "MergeRequestCache", FlushFailingCache)
-    monkeypatch.setattr(collector_module, "GitLabClient", FakeGitLabClient)
-    monkeypatch.setattr(collector_module.projects, "fetch_group_projects", return_projects)
-    monkeypatch.setattr(typer, "secho", capture_secho)
+    collector = MergeRequestCollector(
+        failing_settings,
+        client_factory=lambda app_settings: FakeGitLabClient(
+            app_settings,
+            responses={_group_projects_path(failing_settings): []},
+        ),
+        cache_provider=lambda cache_dir: FlushFailingCache(cache_dir),
+    )
 
     with pytest.raises(typer.Exit) as excinfo:
         await collector.run()
@@ -206,7 +210,13 @@ async def test_run_exits_when_cache_flush_fails(
     exit_exception = excinfo.value
     assert exit_exception.exit_code == 1
     assert "cache flush failure" in caplog.text
-    assert captured_messages
-    secho_message, is_err = captured_messages[-1]
-    assert "cache flush failure" in secho_message
-    assert is_err is True
+    captured = capsys.readouterr()
+    assert "cache flush failure" in captured.err
+
+
+def _group_projects_path(settings: AppSettings) -> str:
+    return f"/groups/{quote(settings.group_id_or_path, safe='')}/projects"
+
+
+def _project_merge_requests_path(project_id: int) -> str:
+    return f"/projects/{project_id}/merge_requests"

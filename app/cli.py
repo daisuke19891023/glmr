@@ -16,6 +16,7 @@ from app.collector import MergeRequestCollector
 from app.config import AppSettings, load_settings
 from app.gitlab_client import GitLabClient
 from app.render.service import RenderService
+from app.store.jsonl_cache import MergeRequestCache
 
 app = typer.Typer(add_completion=False, help="GitLab Merge Request metrics tooling.")
 
@@ -56,7 +57,11 @@ def collect(
     try:
         base_settings = load_settings()
         settings = _patched_settings(base_settings, since=since, group=group)
-        collector = MergeRequestCollector(settings)
+        collector = MergeRequestCollector(
+            settings,
+            client_factory=GitLabClient,
+            cache_provider=MergeRequestCache,
+        )
         summary = asyncio.run(collector.run())
     except ValueError as exc:
         _handle_settings_error(exc)

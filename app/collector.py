@@ -2,7 +2,9 @@
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, cast
+from collections.abc import Callable
+from pathlib import Path
+from typing import TYPE_CHECKING, Protocol, cast
 
 import typer
 
@@ -24,18 +26,53 @@ DetailResult = tuple[
 ]
 
 
+class MergeRequestCacheProtocol(Protocol):
+    """Protocol capturing the cache behaviors used by the collector."""
+
+    def should_store(self, record: MergeRequestRecord) -> bool:
+        """Return True when the provided record should update the cache."""
+        ...
+
+    def upsert(self, record: MergeRequestRecord) -> None:
+        """Insert or update the record inside the cache."""
+        ...
+
+    def flush(self) -> None:
+        """Persist any pending cache changes to durable storage."""
+        ...
+
+
 class MergeRequestCollector:
     """Collect merge request data, discussions, notes, and reviewers for projects."""
 
-    def __init__(self, settings: "AppSettings") -> None:
+    def __init__(
+        self,
+        settings: "AppSettings",
+        *,
+        client_factory: Callable[["AppSettings"], GitLabClient] | None = None,
+        cache_provider: MergeRequestCacheProtocol
+        | Callable[[Path], MergeRequestCacheProtocol]
+        | None = None,
+    ) -> None:
         """Initialize the collector with runtime settings."""
         self._settings = settings
         self._semaphore = asyncio.Semaphore(settings.max_concurrency)
+        self._client_factory: Callable[[AppSettings], GitLabClient]
+        self._client_factory = client_factory or GitLabClient
+        if cache_provider is None:
+            self._cache_factory: Callable[[Path], MergeRequestCacheProtocol] | None = MergeRequestCache
+            self._cache_instance: MergeRequestCacheProtocol | None = None
+        elif callable(cache_provider):
+            self._cache_factory = cache_provider
+            self._cache_instance = None
+        else:
+            self._cache_factory = None
+            self._cache_instance = cache_provider
 
     async def run(self) -> dict[str, int]:
         """Execute the collection workflow, returning summary statistics."""
         try:
-            cache = MergeRequestCache(self._settings.cache_dir)
+            cache = self._resolve_cache()
         except OSError as exc:
             LOGGER.exception(
                 "Failed to initialize merge request cache at %s",
@@ -46,7 +83,7 @@ class MergeRequestCollector:
                 err=True,
             )
             raise typer.Exit(1) from exc
-        async with GitLabClient(self._settings) as client:
+        async with self._client_factory(self._settings) as client:
             try:
                 project_list = await projects.fetch_group_projects(
                     client,
@@ -80,11 +117,20 @@ class MergeRequestCollector:
             raise typer.Exit(1) from exc
         return {"projects": len(project_list), "seen": total_seen, "written": total_written}
 
+    def _resolve_cache(self) -> MergeRequestCacheProtocol:
+        """Return a cache instance using either an instance or factory."""
+        if self._cache_instance is not None:
+            return self._cache_instance
+        if self._cache_factory is None:
+            msg = "Cache factory is not configured"
+            raise RuntimeError(msg)
+        return self._cache_factory(self._settings.cache_dir)
+
     async def _collect_project(
         self,
         client: GitLabClient,
         project: Project,
-        cache: MergeRequestCache,
+        cache: MergeRequestCacheProtocol,
     ) -> dict[str, int]:
         LOGGER.debug("Collecting merge requests for project %s", project.path_with_namespace)
         try:

@@ -540,6 +540,80 @@ wheels = [
 ]
 
 [[package]]
+name = "glmr"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "httpx" },
+    { name = "jinja2" },
+    { name = "orjson" },
+    { name = "pendulum" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "tenacity" },
+    { name = "typer" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "commitizen" },
+    { name = "diff-cover" },
+    { name = "freezegun" },
+    { name = "hatch" },
+    { name = "nox" },
+    { name = "pdm" },
+    { name = "pexpect" },
+    { name = "pip-audit" },
+    { name = "pre-commit" },
+    { name = "py-spy" },
+    { name = "pyright" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "pytest-mock" },
+    { name = "pytest-xdist" },
+    { name = "python-semantic-release" },
+    { name = "responses" },
+    { name = "ruff" },
+    { name = "scalene" },
+    { name = "uv" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "commitizen", marker = "extra == 'dev'", specifier = ">=4.9.1" },
+    { name = "diff-cover", marker = "extra == 'dev'", specifier = ">=9.7.1" },
+    { name = "freezegun", marker = "extra == 'dev'", specifier = ">=1.5.5" },
+    { name = "hatch", marker = "extra == 'dev'", specifier = ">=1.15.1" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "jinja2", specifier = ">=3.1.6" },
+    { name = "nox", marker = "extra == 'dev'", specifier = ">=2025.10.16" },
+    { name = "orjson", specifier = ">=3.11.4" },
+    { name = "pdm", marker = "extra == 'dev'", specifier = ">=2.26.0" },
+    { name = "pendulum", specifier = ">=3.1.0" },
+    { name = "pexpect", marker = "extra == 'dev'", specifier = ">=4.9.0" },
+    { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.9.0" },
+    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.3.0" },
+    { name = "py-spy", marker = "extra == 'dev'", specifier = ">=0.4.1" },
+    { name = "pydantic", specifier = ">=2.12.3" },
+    { name = "pydantic-settings", specifier = ">=2.11.0" },
+    { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.406" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.2.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.0.0" },
+    { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.15.1" },
+    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.8.0" },
+    { name = "python-semantic-release", marker = "extra == 'dev'", specifier = ">=10.4.1" },
+    { name = "responses", marker = "extra == 'dev'", specifier = ">=0.25.8" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.14.1" },
+    { name = "scalene", marker = "extra == 'dev'", specifier = ">=1.5.55" },
+    { name = "tenacity", specifier = ">=9.1.2" },
+    { name = "typer", specifier = ">=0.20.0" },
+    { name = "uv", extras = ["dev"], marker = "extra == 'dev'", specifier = ">=0.9.5" },
+]
+provides-extras = ["dev"]
+
+[[package]]
 name = "h11"
 version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1784,80 +1858,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f233
 wheels = [
     { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
 ]
-
-[[package]]
-name = "template-project-placeholder"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "httpx" },
-    { name = "jinja2" },
-    { name = "orjson" },
-    { name = "pendulum" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "tenacity" },
-    { name = "typer" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "commitizen" },
-    { name = "diff-cover" },
-    { name = "freezegun" },
-    { name = "hatch" },
-    { name = "nox" },
-    { name = "pdm" },
-    { name = "pexpect" },
-    { name = "pip-audit" },
-    { name = "pre-commit" },
-    { name = "py-spy" },
-    { name = "pyright" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "pytest-mock" },
-    { name = "pytest-xdist" },
-    { name = "python-semantic-release" },
-    { name = "responses" },
-    { name = "ruff" },
-    { name = "scalene" },
-    { name = "uv" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "commitizen", marker = "extra == 'dev'", specifier = ">=4.9.1" },
-    { name = "diff-cover", marker = "extra == 'dev'", specifier = ">=9.7.1" },
-    { name = "freezegun", marker = "extra == 'dev'", specifier = ">=1.5.5" },
-    { name = "hatch", marker = "extra == 'dev'", specifier = ">=1.15.1" },
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "jinja2", specifier = ">=3.1.6" },
-    { name = "nox", marker = "extra == 'dev'", specifier = ">=2025.10.16" },
-    { name = "orjson", specifier = ">=3.11.4" },
-    { name = "pdm", marker = "extra == 'dev'", specifier = ">=2.26.0" },
-    { name = "pendulum", specifier = ">=3.1.0" },
-    { name = "pexpect", marker = "extra == 'dev'", specifier = ">=4.9.0" },
-    { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.9.0" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.3.0" },
-    { name = "py-spy", marker = "extra == 'dev'", specifier = ">=0.4.1" },
-    { name = "pydantic", specifier = ">=2.12.3" },
-    { name = "pydantic-settings", specifier = ">=2.11.0" },
-    { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.406" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.2.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.0.0" },
-    { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.15.1" },
-    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.8.0" },
-    { name = "python-semantic-release", marker = "extra == 'dev'", specifier = ">=10.4.1" },
-    { name = "responses", marker = "extra == 'dev'", specifier = ">=0.25.8" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.14.1" },
-    { name = "scalene", marker = "extra == 'dev'", specifier = ">=1.5.55" },
-    { name = "tenacity", specifier = ">=9.1.2" },
-    { name = "typer", specifier = ">=0.20.0" },
-    { name = "uv", extras = ["dev"], marker = "extra == 'dev'", specifier = ">=0.9.5" },
-]
-provides-extras = ["dev"]
 
 [[package]]
 name = "tenacity"

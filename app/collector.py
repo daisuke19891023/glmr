@@ -34,7 +34,18 @@ class MergeRequestCollector:
 
     async def run(self) -> dict[str, int]:
         """Execute the collection workflow, returning summary statistics."""
-        cache = MergeRequestCache(self._settings.cache_dir)
+        try:
+            cache = MergeRequestCache(self._settings.cache_dir)
+        except OSError as exc:
+            LOGGER.exception(
+                "Failed to initialize merge request cache at %s",
+                self._settings.cache_dir,
+            )
+            typer.secho(
+                f"Failed to initialize cache at {self._settings.cache_dir}: {exc}",
+                err=True,
+            )
+            raise typer.Exit(1) from exc
         async with GitLabClient(self._settings) as client:
             try:
                 project_list = await projects.fetch_group_projects(
@@ -55,7 +66,18 @@ class MergeRequestCollector:
                 project_records = await self._collect_project(client, project, cache)
                 total_seen += project_records["seen"]
                 total_written += project_records["written"]
-        cache.flush()
+        try:
+            cache.flush()
+        except OSError as exc:
+            LOGGER.exception(
+                "Failed to flush merge request cache at %s",
+                self._settings.cache_dir,
+            )
+            typer.secho(
+                f"Failed to flush cache at {self._settings.cache_dir}: {exc}",
+                err=True,
+            )
+            raise typer.Exit(1) from exc
         return {"projects": len(project_list), "seen": total_seen, "written": total_written}
 
     async def _collect_project(

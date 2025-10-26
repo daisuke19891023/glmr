@@ -130,3 +130,83 @@ async def test_run_skips_project_when_merge_requests_fail(
 
     assert summary == {"projects": 1, "seen": 0, "written": 0}
     assert "merge request fetch failed" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_run_exits_when_cache_initialization_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    settings: AppSettings,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Collector.run should exit when the cache cannot be created."""
+    caplog.set_level(logging.ERROR, logger=collector_module.__name__)
+    failing_settings = settings.model_copy(update={"cache_dir": tmp_path})
+    collector = MergeRequestCollector(failing_settings)
+
+    class RaisingCache:
+        def __init__(self, *_: object, **__: object) -> None:
+            raise OSError("cache initialization failure")
+
+    captured_messages: list[tuple[str, bool]] = []
+
+    def capture_secho(message: str, *, err: bool = False, **kwargs: object) -> None:
+        del kwargs
+        captured_messages.append((message, err))
+
+    monkeypatch.setattr(collector_module, "MergeRequestCache", RaisingCache)
+    monkeypatch.setattr(collector_module, "GitLabClient", FakeGitLabClient)
+    monkeypatch.setattr(typer, "secho", capture_secho)
+
+    with pytest.raises(typer.Exit) as excinfo:
+        await collector.run()
+
+    exit_exception = excinfo.value
+    assert exit_exception.exit_code == 1
+    assert "cache initialization failure" in caplog.text
+    assert captured_messages
+    secho_message, is_err = captured_messages[-1]
+    assert "cache initialization failure" in secho_message
+    assert is_err is True
+
+
+@pytest.mark.asyncio
+async def test_run_exits_when_cache_flush_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    settings: AppSettings,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Collector.run should exit when flushing the cache fails."""
+    caplog.set_level(logging.ERROR, logger=collector_module.__name__)
+    failing_settings = settings.model_copy(update={"cache_dir": tmp_path})
+    collector = MergeRequestCollector(failing_settings)
+
+    class FlushFailingCache(FakeMergeRequestCache):
+        def flush(self) -> None:
+            raise OSError("cache flush failure")
+
+    async def return_projects(*_: object, **__: object) -> list[Project]:
+        return []
+
+    captured_messages: list[tuple[str, bool]] = []
+
+    def capture_secho(message: str, *, err: bool = False, **kwargs: object) -> None:
+        del kwargs
+        captured_messages.append((message, err))
+
+    monkeypatch.setattr(collector_module, "MergeRequestCache", FlushFailingCache)
+    monkeypatch.setattr(collector_module, "GitLabClient", FakeGitLabClient)
+    monkeypatch.setattr(collector_module.projects, "fetch_group_projects", return_projects)
+    monkeypatch.setattr(typer, "secho", capture_secho)
+
+    with pytest.raises(typer.Exit) as excinfo:
+        await collector.run()
+
+    exit_exception = excinfo.value
+    assert exit_exception.exit_code == 1
+    assert "cache flush failure" in caplog.text
+    assert captured_messages
+    secho_message, is_err = captured_messages[-1]
+    assert "cache flush failure" in secho_message
+    assert is_err is True

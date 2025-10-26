@@ -66,7 +66,7 @@ class RenderService:
             template.render(
                 report=report,
                 window_keys=list(report.window_keys()),
-                report_json=self._encode_json(report),
+                report_payload=report.model_dump(mode="json"),
             ),
             encoding="utf-8",
         )
@@ -126,5 +126,3 @@ class RenderService:
                 digest.update(chunk)
         return digest.hexdigest()
 
-    def _encode_json(self, report: Report) -> str:
-        return orjson.dumps(report.model_dump(mode="json"), option=orjson.OPT_INDENT_2).decode()

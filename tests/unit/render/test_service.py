@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -117,4 +118,54 @@ def test_render_service_skips_unmodified_publish(
     renderer.run()
     public_calls_second = [call for call in copy_calls if call[1].is_relative_to(public_dir)]
     assert public_calls_second == []
+
+
+def test_render_service_escapes_script_payload(tmp_path: Path) -> None:
+    """Ensure rendered JSON data escapes closing script tags."""
+    reference = pendulum.datetime(2024, 2, 1, tz="UTC")
+    cache_path = tmp_path / "merge_requests.jsonl"
+    report_path = tmp_path / "agg" / "report.json"
+
+    malicious_title = "Security </script> check"
+    record = build_record(reference)
+    patched_record = record.model_copy(
+        update={
+            "merge_request": record.merge_request.model_copy(update={"title": malicious_title}),
+        },
+    )
+    _write_cache(cache_path, patched_record)
+
+    aggregation = AggregationService(
+        cache_path=cache_path,
+        output_path=report_path,
+        reference=reference,
+    )
+    aggregation.run()
+
+    build_dir = tmp_path / "build"
+    public_dir = tmp_path / "public"
+    templates = Path("app/templates")
+    static_dir = Path("app/render/static")
+
+    renderer = RenderService(
+        report_path=report_path,
+        template_dir=templates,
+        static_dir=static_dir,
+        build_dir=build_dir,
+        public_dir=public_dir,
+    )
+    renderer.run()
+
+    index_html = public_dir / "index.html"
+    payload = index_html.read_text(encoding="utf-8")
+    script_match = re.search(
+        r"<script id=\"report-data\" type=\"application/json\">(.*?)</script>",
+        payload,
+        re.DOTALL,
+    )
+    assert script_match is not None
+    script_payload = script_match.group(1)
+
+    assert "</script>" not in script_payload
+    assert "\\u003c/script" in script_payload
 

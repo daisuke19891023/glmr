@@ -67,5 +67,5 @@
     </table>
 </section>
 
-<script id="report-data" type="application/json">{{ report_json | safe }}</script>
+<script id="report-data" type="application/json">{{ report_payload | tojson }}</script>
 {% endblock %}

@@ -19,8 +19,8 @@ This project collects merge request metadata from GitLab, persists raw payloads 
 | Command | Description |
 | --- | --- |
 | `glmr collect` | Collect merge requests, discussions, notes, and reviewers and write them to the JSONL cache under `data/raw/mr/`. |
-| `glmr aggregate` | Placeholder for the upcoming aggregation pipeline. |
-| `glmr render` | Placeholder for the upcoming rendering pipeline. |
+| `glmr aggregate` | Aggregate cached merge request data into windowed project and people metrics written to `data/agg/report.json`. |
+| `glmr render` | Render the aggregated report into static HTML/JS assets under `public/` with diff-aware publishing. |
 | `glmr doctor` | Validate configuration and verify GitLab API connectivity. |
 
 ## Development Workflow

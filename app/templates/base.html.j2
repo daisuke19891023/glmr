@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}GLMR Dashboard{% endblock %}</title>
+    <link rel="stylesheet" href="static/styles.css" />
+    {% block head_scripts %}{% endblock %}
+</head>
+<body>
+    <header class="site-header">
+        <div class="container">
+            <h1><a href="/">GitLab Merge Request Metrics</a></h1>
+            <nav>
+                <a href="/index.html">Overview</a>
+            </nav>
+        </div>
+    </header>
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    <script src="static/filters.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,71 @@
+{% extends "base.html.j2" %}
+{% set default_window = "30d" %}
+
+{% block title %}Dashboard · GLMR{% endblock %}
+
+{% block content %}
+<section class="filters">
+    <label for="window-select">Time window</label>
+    <select id="window-select">
+        {% for key in window_keys %}
+        <option value="{{ key }}" {% if key == default_window %}selected{% endif %}>{{ key }}</option>
+        {% endfor %}
+    </select>
+</section>
+
+<section>
+    <h2>Projects</h2>
+    <table class="metrics-table" data-table="projects">
+        <thead>
+            <tr>
+                <th>Project</th>
+                <th>Created</th>
+                <th>Merged</th>
+                <th>Closed</th>
+                <th>Comments</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for project in report.projects %}
+            {% set metrics = project.metrics[default_window] %}
+            <tr data-entity="project" data-name="{{ project.project.path_with_namespace }}">
+                <th scope="row">{{ project.project.name }}</th>
+                <td class="metric" data-field="merge_requests_created">{{ metrics.merge_requests_created }}</td>
+                <td class="metric" data-field="merge_requests_merged">{{ metrics.merge_requests_merged }}</td>
+                <td class="metric" data-field="merge_requests_closed">{{ metrics.merge_requests_closed }}</td>
+                <td class="metric" data-field="comments_written">{{ metrics.comments_written }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section>
+    <h2>People</h2>
+    <table class="metrics-table" data-table="people">
+        <thead>
+            <tr>
+                <th>Person</th>
+                <th>Authored</th>
+                <th>Merged</th>
+                <th>Closed</th>
+                <th>Comments</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for person in report.people %}
+            {% set metrics = person.metrics[default_window] %}
+            <tr data-entity="person" data-name="{{ person.user.username }}">
+                <th scope="row"><a href="people/{{ person.user.username }}.html">{{ person.user.name or person.user.username }}</a></th>
+                <td class="metric" data-field="merge_requests_created">{{ metrics.merge_requests_created }}</td>
+                <td class="metric" data-field="merge_requests_merged">{{ metrics.merge_requests_merged }}</td>
+                <td class="metric" data-field="merge_requests_closed">{{ metrics.merge_requests_closed }}</td>
+                <td class="metric" data-field="comments_written">{{ metrics.comments_written }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<script id="report-data" type="application/json">{{ report_json | safe }}</script>
+{% endblock %}

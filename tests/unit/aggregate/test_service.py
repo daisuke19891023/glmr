@@ -1,20 +1,21 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
+"""Tests for the aggregation service."""
 
 import orjson
 import pendulum
 
 from app.aggregate.models import build_windows
 from app.aggregate.service import AggregationService
-from app.models import Discussion, GitLabUser, MergeRequest, MergeRequestRecord, Note, Project
+from tests.factories import build_record
 
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from app.models import MergeRequestRecord
 
 
-def _write_record(path: Path, record: MergeRequestRecord) -> None:
+def _write_record(path: "Path", record: "MergeRequestRecord") -> None:
+    """Persist a merge request record to a JSONL cache file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = record.model_dump(mode="json")
     with path.open("wb") as handle:
@@ -22,48 +23,13 @@ def _write_record(path: Path, record: MergeRequestRecord) -> None:
         handle.write(b"\n")
 
 
-def test_aggregation_service_produces_windowed_metrics(tmp_path: Path) -> None:
+def test_aggregation_service_produces_windowed_metrics(tmp_path: "Path") -> None:
     """AggregationService should produce counts for each configured window."""
     reference = pendulum.datetime(2024, 1, 15, tz="UTC")
     cache_path = tmp_path / "merge_requests.jsonl"
     output_path = tmp_path / "agg" / "report.json"
 
-    project = Project(id=1, path_with_namespace="example/repo", name="Example Repo")
-    author = GitLabUser(id=10, username="alice", name="Alice")
-    reviewer = GitLabUser(id=11, username="bob", name="Bob")
-
-    merge_request = MergeRequest(
-        id=101,
-        iid=7,
-        project_id=project.id,
-        title="Improve build pipeline",
-        state="merged",
-        created_at=reference - pendulum.duration(days=5),
-        updated_at=reference - pendulum.duration(days=1),
-        merged_at=reference - pendulum.duration(days=2),
-        closed_at=None,
-        web_url=None,
-        author=author,
-        assignees=[author],
-        reviewers=[reviewer],
-    )
-
-    note = Note(
-        id=400,
-        body="Looks good!",
-        created_at=reference - pendulum.duration(days=1),
-        updated_at=None,
-        system=False,
-        author=reviewer,
-    )
-    discussion = Discussion(id="abc", individual_note=False, notes=[note])
-
-    record = MergeRequestRecord(
-        project=project,
-        merge_request=merge_request,
-        discussions=[discussion],
-        notes=[],
-    )
+    record = build_record(reference)
     _write_record(cache_path, record)
 
     service = AggregationService(
@@ -100,3 +66,22 @@ def test_aggregation_service_produces_windowed_metrics(tmp_path: Path) -> None:
     assert people["bob"].recent_merge_requests
 
     assert report.generated_at == reference
+
+
+def test_aggregation_service_handles_missing_cache(tmp_path: "Path") -> None:
+    """AggregationService should produce an empty report when no cache exists."""
+    cache_path = tmp_path / "merge_requests.jsonl"
+    output_path = tmp_path / "agg" / "report.json"
+
+    service = AggregationService(
+        cache_path=cache_path,
+        output_path=output_path,
+        windows=build_windows(),
+        reference=pendulum.datetime(2024, 1, 1, tz="UTC"),
+    )
+
+    report = service.run()
+
+    assert output_path.exists()
+    assert report.projects == []
+    assert report.people == []

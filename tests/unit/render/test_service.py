@@ -1,49 +1,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import orjson
 import pendulum
-
+import app.render.service as render_module
 from app.aggregate.service import AggregationService
-from app.models import Discussion, GitLabUser, MergeRequest, MergeRequestRecord, Note, Project
 from app.render.service import RenderService
+from tests.factories import build_record
 
-
-def _create_record(reference: pendulum.DateTime) -> MergeRequestRecord:
-    project = Project(id=1, path_with_namespace="example/repo", name="Example Repo")
-    author = GitLabUser(id=10, username="alice", name="Alice")
-    reviewer = GitLabUser(id=11, username="bob", name="Bob")
-    merge_request = MergeRequest(
-        id=501,
-        iid=42,
-        project_id=project.id,
-        title="Refactor service module",
-        state="merged",
-        created_at=reference - pendulum.duration(days=3),
-        updated_at=reference - pendulum.duration(days=1),
-        merged_at=reference - pendulum.duration(days=1),
-        closed_at=None,
-        web_url=None,
-        author=author,
-        assignees=[author],
-        reviewers=[reviewer],
-    )
-    note = Note(
-        id=900,
-        body="LGTM",
-        created_at=reference - pendulum.duration(days=1),
-        updated_at=None,
-        system=False,
-        author=reviewer,
-    )
-    discussion = Discussion(id="disc", individual_note=False, notes=[note])
-    return MergeRequestRecord(
-        project=project,
-        merge_request=merge_request,
-        discussions=[discussion],
-        notes=[],
-    )
+if TYPE_CHECKING:
+    from app.models import MergeRequestRecord
+    import pytest
 
 
 def _write_cache(cache_path: Path, record: MergeRequestRecord) -> None:
@@ -59,7 +28,7 @@ def test_render_service_builds_static_site(tmp_path: Path) -> None:
     reference = pendulum.datetime(2024, 2, 1, tz="UTC")
     cache_path = tmp_path / "merge_requests.jsonl"
     report_path = tmp_path / "agg" / "report.json"
-    _write_cache(cache_path, _create_record(reference))
+    _write_cache(cache_path, build_record(reference))
 
     aggregation = AggregationService(
         cache_path=cache_path,
@@ -96,3 +65,56 @@ def test_render_service_builds_static_site(tmp_path: Path) -> None:
     assert manifest_payload == manifest
     for key in ("index.html", "people/alice.html", "static/styles.css"):
         assert key in manifest_payload
+
+
+def test_render_service_skips_unmodified_publish(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """RenderService should avoid copying unchanged files into the public directory."""
+    reference = pendulum.datetime(2024, 2, 1, tz="UTC")
+    cache_path = tmp_path / "merge_requests.jsonl"
+    report_path = tmp_path / "agg" / "report.json"
+    _write_cache(cache_path, build_record(reference))
+
+    aggregation = AggregationService(
+        cache_path=cache_path,
+        output_path=report_path,
+        reference=reference,
+    )
+    aggregation.run()
+
+    build_dir = tmp_path / "build"
+    public_dir = tmp_path / "public"
+    templates = Path("app/templates")
+    static_dir = Path("app/render/static")
+
+    renderer = RenderService(
+        report_path=report_path,
+        template_dir=templates,
+        static_dir=static_dir,
+        build_dir=build_dir,
+        public_dir=public_dir,
+    )
+
+    copy_calls: list[tuple[Path, Path]] = []
+    original_copy2 = render_module.shutil.copy2
+
+    def spy_copy2(src: str | Path, dst: str | Path, *, follow_symlinks: bool = True) -> Path:
+        path_src = Path(src)
+        path_dst = Path(dst)
+        copy_calls.append((path_src, path_dst))
+        result = original_copy2(path_src, path_dst, follow_symlinks=follow_symlinks)
+        return Path(result)
+
+    monkeypatch.setattr(render_module.shutil, "copy2", spy_copy2)
+
+    renderer.run()
+    public_calls_first = [call for call in copy_calls if call[1].is_relative_to(public_dir)]
+    assert public_calls_first
+
+    copy_calls.clear()
+    renderer.run()
+    public_calls_second = [call for call in copy_calls if call[1].is_relative_to(public_dir)]
+    assert public_calls_second == []
+

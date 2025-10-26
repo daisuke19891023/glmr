@@ -1,0 +1,100 @@
+:root {
+    color-scheme: light dark;
+    font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background-color: #10141a;
+    color: #e6edf3;
+}
+
+body {
+    margin: 0;
+    background: #0b0f16;
+    color: inherit;
+}
+
+.container {
+    width: min(960px, 90vw);
+    margin: 0 auto;
+    padding: 1.5rem 0;
+}
+
+.site-header {
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+}
+
+.site-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.site-header a {
+    color: #61dafb;
+    text-decoration: none;
+}
+
+.filters {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.filters select {
+    background: #0d1117;
+    color: inherit;
+    border: 1px solid #30363d;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.4rem;
+}
+
+.metrics-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 2rem;
+    background: #0d1117;
+    border: 1px solid #30363d;
+}
+
+.metrics-table th,
+.metrics-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #21262d;
+}
+
+.metrics-table th {
+    text-align: left;
+}
+
+.metrics-table tbody tr:nth-child(even) {
+    background: rgba(96, 218, 251, 0.05);
+}
+
+.back-link {
+    display: inline-block;
+    margin-bottom: 1rem;
+    color: #61dafb;
+    text-decoration: none;
+}
+
+.recent-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0.75rem;
+}
+
+.recent-list a {
+    color: #e6edf3;
+}
+
+.recent-list .meta {
+    display: block;
+    font-size: 0.85rem;
+    color: #8b949e;
+}
+
+.identity {
+    margin-top: -0.5rem;
+    color: #8b949e;
+}

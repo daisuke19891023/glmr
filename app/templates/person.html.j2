@@ -1,0 +1,56 @@
+{% extends "base.html.j2" %}
+
+{% block title %}{{ person.user.name or person.user.username }} · GLMR{% endblock %}
+
+{% block content %}
+<a class="back-link" href="../index.html">← Back to overview</a>
+<section>
+    <h2>{{ person.user.name or person.user.username }}</h2>
+    <p class="identity">@{{ person.user.username }}</p>
+</section>
+
+<section>
+    <h3>Metrics by window</h3>
+    <table class="metrics-table">
+        <thead>
+            <tr>
+                <th>Window</th>
+                <th>Authored</th>
+                <th>Merged</th>
+                <th>Closed</th>
+                <th>Comments</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for key in window_keys %}
+            {% set metrics = person.metrics.get(key) %}
+            <tr>
+                <th scope="row">{{ key }}</th>
+                <td>{{ metrics.merge_requests_created if metrics else 0 }}</td>
+                <td>{{ metrics.merge_requests_merged if metrics else 0 }}</td>
+                <td>{{ metrics.merge_requests_closed if metrics else 0 }}</td>
+                <td>{{ metrics.comments_written if metrics else 0 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section>
+    <h3>Recent merge requests</h3>
+    {% if person.recent_merge_requests %}
+    <ul class="recent-list">
+        {% for merge_request in person.recent_merge_requests %}
+        <li>
+            <a href="{{ merge_request.web_url or '#' }}" target="_blank" rel="noopener noreferrer">
+                {{ merge_request.title }}
+            </a>
+            <span class="meta">{{ merge_request.project_path }} · {{ merge_request.created_at.strftime('%Y-%m-%d') }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p>No recent merge requests recorded.</p>
+    {% endif %}
+</section>
+{% endblock %}

@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 from typing import Annotated
 
 import typer
 
+from app.aggregate.service import AggregationService
 from app.collector import MergeRequestCollector
 from app.config import AppSettings, load_settings
 from app.gitlab_client import GitLabClient
+from app.render.service import RenderService
 
 app = typer.Typer(add_completion=False, help="GitLab Merge Request metrics tooling.")
 
@@ -55,15 +58,35 @@ def collect(
 
 
 @app.command()
-def aggregate() -> None:  # pragma: no cover - placeholder for future implementation
+def aggregate() -> None:
     """Aggregate raw data into reporting metrics."""
-    typer.echo("Aggregation pipeline not yet implemented in this milestone.")
+    settings = load_settings()
+    cache_path = settings.cache_dir / "merge_requests.jsonl"
+    output_path = Path("data/agg/report.json")
+    service = AggregationService(cache_path=cache_path, output_path=output_path)
+    report = service.run()
+    typer.echo(
+        f"Aggregated {len(report.projects)} projects and {len(report.people)} people into {output_path}",
+    )
 
 
 @app.command()
-def render() -> None:  # pragma: no cover - placeholder for future implementation
+def render() -> None:
     """Render HTML dashboards from aggregated metrics."""
-    typer.echo("Rendering pipeline not yet implemented in this milestone.")
+    report_path = Path("data/agg/report.json")
+    build_dir = Path("build")
+    public_dir = Path("public")
+    template_dir = Path("app/templates")
+    static_dir = Path("app/render/static")
+    service = RenderService(
+        report_path=report_path,
+        template_dir=template_dir,
+        static_dir=static_dir,
+        build_dir=build_dir,
+        public_dir=public_dir,
+    )
+    manifest = service.run()
+    typer.echo(f"Rendered {len(manifest)} artifacts to {public_dir}")
 
 
 @app.command()

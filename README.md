@@ -1,18 +1,42 @@
 # GLMR – GitLab Merge Request Metrics Toolkit
 
-This project collects merge request metadata from GitLab, persists raw payloads for offline analysis, and will eventually drive aggregation and dashboard rendering workflows. The current milestone focuses on establishing the collection foundation.
+This project collects merge request metadata from GitLab, persists raw payloads for offline analysis, and will eventually drive aggregation and dashboard rendering workflows. The current milestone focuses on establishing the collection foundation for data collection, aggregation, and publishing.
+
+## Documentation
+
+- [User Manual (English)](docs/reference/user-manual.en.md)
+- [ユーザーマニュアル（日本語）](docs/reference/user-manual.ja.md)
+
+These guides walk through installation, configuration, data management, and day-to-day operations.
 
 ## Getting Started
 
-1. Install dependencies using [uv](https://github.com/astral-sh/uv):
-   ```bash
-   uv sync --extra dev
-   ```
-2. Copy `.env.example` to `.env` and update the values for your GitLab instance and access token.
-3. Run one of the Typer CLI commands:
-   ```bash
-   uv run glmr --help
-   ```
+### Prerequisites
+
+- Python 3.13+
+- Access to a GitLab instance and a personal access token with API scope
+- [uv](https://github.com/astral-sh/uv) for dependency management
+
+### Installation
+
+Install dependencies using uv:
+
+```bash
+uv sync --extra dev
+```
+
+### Configuration
+
+1. Copy `.env.example` to `.env`.
+2. Update the GitLab host, project path, access token, and output directories to match your environment.
+
+### Running the CLI
+
+Explore the available commands:
+
+```bash
+uv run glmr --help
+```
 
 ## CLI Commands
 

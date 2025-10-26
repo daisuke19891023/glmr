@@ -26,7 +26,7 @@ def test_collect_command_invokes_collector(
     settings: AppSettings,
 ) -> None:
     """Collect command should configure the collector with overrides and report output."""
-    captured: dict[str, "AppSettings"] = {}
+    captured: dict[str, AppSettings] = {}
 
     async def fake_run() -> dict[str, int]:
         return {"projects": 2, "seen": 5, "written": 4}
@@ -55,7 +55,7 @@ def test_collect_command_invokes_collector(
     assert result.exit_code == 0
     assert "Collected 4 merge requests" in result.stdout
 
-    used_settings: "AppSettings" = captured["settings"]
+    used_settings: AppSettings = captured["settings"]
     assert used_settings.report_since == "2024-02-01T00:00:00Z"
     assert used_settings.group_id_or_path == "custom/group"
 
@@ -67,7 +67,7 @@ def test_aggregate_command_uses_cache_dir(
     settings: AppSettings,
 ) -> None:
     """Aggregate command should target the configured cache directory and output path."""
-    captured: dict[str, "Path"] = {}
+    captured: dict[str, Path] = {}
 
     def fake_load_settings() -> AppSettings:
         return settings.model_copy(update={"cache_dir": tmp_path})
@@ -88,8 +88,8 @@ def test_aggregate_command_uses_cache_dir(
     assert result.exit_code == 0
     assert "Aggregated 1 projects and 1 people" in result.stdout
 
-    cache_path: "Path" = captured["cache_path"]
-    output_path: "Path" = captured["output_path"]
+    cache_path: Path = captured["cache_path"]
+    output_path: Path = captured["output_path"]
     assert str(cache_path).endswith("merge_requests.jsonl")
     assert output_path.name == "report.json"
 
